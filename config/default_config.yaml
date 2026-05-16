@@ -1,0 +1,70 @@
+# 沪深300价值股票量化选股系统 - 默认配置
+
+# 数据源配置
+data_source:
+  primary: "akshare"
+  fallback: "baostock"
+  retry:
+    max_attempts: 3
+    interval_seconds: 5.0
+  cache:
+    enabled: true
+    cache_dir: "output_data/cache"
+    finance_expire_hours: 4
+    market_expire_hours: 1
+
+# 退市风险过滤
+delisting:
+  st_keywords: ["ST", "*ST"]
+  min_revenue: 100000000  # 1亿元
+  require_positive_net_assets: true
+
+# 资产垫分级阈值
+asset_cushion:
+  t0:
+    min_conservative_ratio: 0.8
+    min_loose_ratio: 1.5
+  t1:
+    min_loose_ratio: 1.0
+    require_positive_conservative: true
+  t2:
+    require_positive_loose: true
+    min_current_asset_net_ratio: 0.5
+
+# 经营安全阈值
+operation_safety:
+  require_positive_fcf: true
+  max_capex_ratio: 0.5
+
+# 兑现安全阈值
+redemption_safety:
+  dividend:
+    min_years: 3
+    min_dividend_yield: 0.02
+  earnings_recovery:
+    lookback_years: 3
+
+# 综合评分权重与分值
+scoring:
+  weights:
+    asset_cushion: 0.4
+    operation_safety: 0.3
+    redemption_safety: 0.3
+  scores:
+    t0: 100
+    t1: 70
+    t2: 40
+    fail: 0
+    operation_pass: 100
+    operation_partial: 50
+    operation_fail: 0
+    redemption_pass: 100
+    redemption_fail: 0
+
+# 输出配置
+output:
+  csv_dir: "output_data/results"
+  csv_encoding: "utf-8-sig"
+  log_dir: "logs"
+  log_level: "INFO"
+  terminal_max_rows: 50

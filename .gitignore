@@ -1,6 +1,9 @@
 # 运行结果数据
 output_data/
 
+# 原始二进制文档（体积大，已有docs/中的md版本）
+origin_docs/
+
 # 日志
 logs/
 

@@ -75,6 +75,49 @@ class RedemptionSafetyConfig:
 
 
 @dataclass
+class ContinuousMappingConfig:
+    func_type: str = "linear"
+    coefficient: float = 1.0
+    lower_bound: float = 0.0
+    upper_bound: float = 1.0
+    max_bonus: float = 10.0
+    max_penalty: float = 10.0
+
+
+@dataclass
+class AssetCushionContinuousConfig:
+    conservative_ratio_mapping: ContinuousMappingConfig = field(default_factory=lambda: ContinuousMappingConfig(lower_bound=0.8, upper_bound=2.0, max_bonus=10.0, max_penalty=0.0))
+    loose_ratio_mapping: ContinuousMappingConfig = field(default_factory=lambda: ContinuousMappingConfig(lower_bound=1.0, upper_bound=3.0, max_bonus=10.0, max_penalty=0.0))
+    enabled: bool = True
+
+
+@dataclass
+class OperationSafetyContinuousConfig:
+    capex_ratio_mapping: ContinuousMappingConfig = field(default_factory=lambda: ContinuousMappingConfig(lower_bound=0.0, upper_bound=0.5, max_bonus=15.0, max_penalty=15.0))
+    enabled: bool = True
+
+
+@dataclass
+class RedemptionSafetyContinuousConfig:
+    dividend_yield_weight: float = 0.4
+    dividend_years_weight: float = 0.3
+    earnings_recovery_weight: float = 0.3
+    dividend_yield_mapping: ContinuousMappingConfig = field(default_factory=lambda: ContinuousMappingConfig(func_type="sigmoid", coefficient=2.0, lower_bound=0.02, upper_bound=0.08, max_bonus=20.0, max_penalty=0.0))
+    dividend_years_mapping: ContinuousMappingConfig = field(default_factory=lambda: ContinuousMappingConfig(lower_bound=3.0, upper_bound=10.0, max_bonus=15.0, max_penalty=0.0))
+    earnings_recovery_mapping: ContinuousMappingConfig = field(default_factory=lambda: ContinuousMappingConfig(lower_bound=0.0, upper_bound=1.0, max_bonus=15.0, max_penalty=0.0))
+    base_pass_score: float = 60.0
+    base_fail_score: float = 0.0
+    enabled: bool = True
+
+
+@dataclass
+class TieBreakConfig:
+    enabled: bool = True
+    factors: list = field(default_factory=lambda: ["conservative_ratio", "loose_ratio", "dividend_yield"])
+    factor_weights: list = field(default_factory=lambda: [0.4, 0.3, 0.3])
+
+
+@dataclass
 class ScoringConfig:
     asset_cushion_weight: float = 0.4
     operation_safety_weight: float = 0.3
@@ -88,6 +131,10 @@ class ScoringConfig:
     operation_fail_score: float = 0.0
     redemption_pass_score: float = 100.0
     redemption_fail_score: float = 0.0
+    asset_continuous: AssetCushionContinuousConfig = field(default_factory=AssetCushionContinuousConfig)
+    operation_continuous: OperationSafetyContinuousConfig = field(default_factory=OperationSafetyContinuousConfig)
+    redemption_continuous: RedemptionSafetyContinuousConfig = field(default_factory=RedemptionSafetyContinuousConfig)
+    tie_break: TieBreakConfig = field(default_factory=TieBreakConfig)
 
 
 @dataclass
@@ -192,6 +239,7 @@ class Settings:
         sc_raw = raw.get("scoring", {})
         weights = sc_raw.get("weights", {})
         scores = sc_raw.get("scores", {})
+        cont_raw = sc_raw.get("continuous", {})
 
         out_raw = raw.get("output", {})
 
@@ -251,6 +299,10 @@ class Settings:
                 operation_fail_score=scores.get("operation_fail", 0),
                 redemption_pass_score=scores.get("redemption_pass", 100),
                 redemption_fail_score=scores.get("redemption_fail", 0),
+                asset_continuous=cls._build_asset_continuous(cont_raw.get("asset_cushion", {})),
+                operation_continuous=cls._build_operation_continuous(cont_raw.get("operation_safety", {})),
+                redemption_continuous=cls._build_redemption_continuous(cont_raw.get("redemption_safety", {})),
+                tie_break=cls._build_tie_break(sc_raw.get("tie_break", {})),
             ),
             output=OutputConfig(
                 csv_dir=out_raw.get("csv_dir", "output_data/results"),
@@ -332,6 +384,54 @@ class Settings:
             asset_cushion=hk_ac,
             scoring=hk_sc,
             field_mapping_path=hk_raw.get("field_mapping_path", "config/hk_field_mapping.yaml"),
+        )
+
+    @classmethod
+    def _build_mapping_config(cls, raw: dict) -> ContinuousMappingConfig:
+        return ContinuousMappingConfig(
+            func_type=raw.get("func_type", "linear"),
+            coefficient=raw.get("coefficient", 1.0),
+            lower_bound=raw.get("lower_bound", 0.0),
+            upper_bound=raw.get("upper_bound", 1.0),
+            max_bonus=raw.get("max_bonus", 10.0),
+            max_penalty=raw.get("max_penalty", 10.0),
+        )
+
+    @classmethod
+    def _build_asset_continuous(cls, raw: dict) -> AssetCushionContinuousConfig:
+        return AssetCushionContinuousConfig(
+            conservative_ratio_mapping=cls._build_mapping_config(raw.get("conservative_ratio_mapping", {})),
+            loose_ratio_mapping=cls._build_mapping_config(raw.get("loose_ratio_mapping", {})),
+            enabled=raw.get("enabled", True),
+        )
+
+    @classmethod
+    def _build_operation_continuous(cls, raw: dict) -> OperationSafetyContinuousConfig:
+        return OperationSafetyContinuousConfig(
+            capex_ratio_mapping=cls._build_mapping_config(raw.get("capex_ratio_mapping", {})),
+            enabled=raw.get("enabled", True),
+        )
+
+    @classmethod
+    def _build_redemption_continuous(cls, raw: dict) -> RedemptionSafetyContinuousConfig:
+        return RedemptionSafetyContinuousConfig(
+            dividend_yield_weight=raw.get("dividend_yield_weight", 0.4),
+            dividend_years_weight=raw.get("dividend_years_weight", 0.3),
+            earnings_recovery_weight=raw.get("earnings_recovery_weight", 0.3),
+            dividend_yield_mapping=cls._build_mapping_config(raw.get("dividend_yield_mapping", {})),
+            dividend_years_mapping=cls._build_mapping_config(raw.get("dividend_years_mapping", {})),
+            earnings_recovery_mapping=cls._build_mapping_config(raw.get("earnings_recovery_mapping", {})),
+            base_pass_score=raw.get("base_pass_score", 60.0),
+            base_fail_score=raw.get("base_fail_score", 0.0),
+            enabled=raw.get("enabled", True),
+        )
+
+    @classmethod
+    def _build_tie_break(cls, raw: dict) -> TieBreakConfig:
+        return TieBreakConfig(
+            enabled=raw.get("enabled", True),
+            factors=raw.get("factors", ["conservative_ratio", "loose_ratio", "dividend_yield"]),
+            factor_weights=raw.get("factor_weights", [0.4, 0.3, 0.3]),
         )
 
     @classmethod

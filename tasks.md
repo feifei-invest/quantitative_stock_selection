@@ -1526,3 +1526,692 @@ HK-T06~T11 ──→ HK-T15 (单元测试)
 | NFR-HK-003 | 字段名变更快速适配 | HK-T02, HK-T05 |
 | NFR-HK-004 | analyzer层代码共享 | HK-T14 |
 | NFR-HK-005 | 优先合并报表 | HK-T07 |
+
+---
+
+# 评分连续化改进 — 编码任务分解文档
+
+---
+
+## 评分连续化任务总览表
+
+| 任务编号 | 任务名称 | 所属模块 | 关联需求 | 前置任务 | 优先级 | 预估工时 |
+|----------|----------|----------|----------|----------|--------|----------|
+| REFINE-T01 | 连续化评分配置数据类定义 | config/ | REQ-011改进 | T09 | P0 | 1.5h |
+| REFINE-T02 | 连续化映射函数工具模块 | common/ | REQ-011改进 | T03 | P0 | 1.5h |
+| REFINE-T03 | 资产垫评分连续化改造 | analyzer/ | REQ-011改进 | REFINE-T01, REFINE-T02, T17 | P0 | 2h |
+| REFINE-T04 | 经营安全评分连续化改造 | analyzer/ | REQ-011改进 | REFINE-T01, REFINE-T02, T18 | P0 | 1.5h |
+| REFINE-T05 | 兑现安全评分连续化改造 | analyzer/ | REQ-011改进 | REFINE-T01, REFINE-T02, T19 | P0 | 2h |
+| REFINE-T06 | 综合评分器Scorer连续化改造 | analyzer/ | REQ-011改进 | REFINE-T03~T05, T20 | P0 | 2h |
+| REFINE-T07 | ScoredResult模型扩展（连续化字段） | common/ | REQ-011改进, REQ-014 | REFINE-T06, T05 | P1 | 1h |
+| REFINE-T08 | 配置文件连续化参数扩展 | config/ | NFR-004 | REFINE-T01, T08 | P1 | 1h |
+| REFINE-T09 | 区分度次级排序因子实现 | analyzer/ | REQ-012改进 | REFINE-T06, T17, T18 | P1 | 1.5h |
+| REFINE-T10 | 输出层适配连续化评分字段 | output/ | REQ-014改进 | REFINE-T07, T22, T23 | P1 | 1h |
+| REFINE-T11 | 评分连续化单元测试 | tests/ | REQ-011改进 | REFINE-T06, REFINE-T09 | P2 | 3h |
+| REFINE-T12 | 区分度验证与回归测试 | tests/ | REQ-011改进, REQ-012改进 | REFINE-T11, T26 | P2 | 2h |
+
+**评分连续化总计：12个任务，预估总工时约 19 小时**
+
+---
+
+## 评分连续化任务详细描述
+
+---
+
+### REFINE-T01: 连续化评分配置数据类定义
+
+- **任务名称**：连续化评分配置数据类定义
+- **所属模块**：`config/settings.py`
+- **关联需求**：REQ-011改进（评分连续化）
+- **前置任务**：T09
+- **优先级**：P0
+- **预估工时**：1.5h
+
+- **任务描述**：
+  在 `config/settings.py` 中新增连续化评分相关配置数据类，所有连续化参数均可通过配置文件调整。
+
+  具体新增数据类：
+
+  - `ContinuousMappingConfig` — 通用连续映射配置：
+    - `func_type: str = "linear"` — 映射函数类型，可选 `"linear"` / `"sigmoid"` / `"tanh"`
+    - `coefficient: float = 1.0` — 映射系数（控制灵敏度）
+    - `lower_bound: float = 0.0` — 输入值下界
+    - `upper_bound: float = 1.0` — 输入值上界
+    - `max_bonus: float = 10.0` — 最大加分值
+    - `max_penalty: float = 10.0` — 最大扣分值
+
+  - `AssetCushionContinuousConfig` — 资产垫连续化配置：
+    - `conservative_ratio_mapping: ContinuousMappingConfig` — 保守比率连续映射配置（默认linear, 下界0.8, 上界2.0, max_bonus=10）
+    - `loose_ratio_mapping: ContinuousMappingConfig` — 宽松比率连续映射配置（默认linear, 下界1.0, 上界3.0, max_bonus=10）
+    - `enabled: bool = True` — 是否启用资产垫连续化
+
+  - `OperationSafetyContinuousConfig` — 经营安全连续化配置：
+    - `capex_ratio_mapping: ContinuousMappingConfig` — capex_ratio连续映射配置（默认linear, 下界0.0, 上界0.5, max_penalty=15）
+    - `enabled: bool = True` — 是否启用经营安全连续化
+
+  - `RedemptionSafetyContinuousConfig` — 兑现安全连续化配置：
+    - `dividend_yield_weight: float = 0.4` — 股息率权重
+    - `dividend_years_weight: float = 0.3` — 分红连续年数权重
+    - `earnings_recovery_weight: float = 0.3` — 盈利恢复强度权重
+    - `dividend_yield_mapping: ContinuousMappingConfig` — 股息率连续映射配置（默认sigmoid, 下界0.02, 上界0.08, max_bonus=20）
+    - `dividend_years_mapping: ContinuousMappingConfig` — 分红年数连续映射配置（默认linear, 下界3, 上界10, max_bonus=15）
+    - `earnings_recovery_mapping: ContinuousMappingConfig` — 盈利恢复强度映射配置（默认linear, 下界0.0, 上界1.0, max_bonus=15）
+    - `base_pass_score: float = 60.0` — 满足兑现逻辑的基础分（不再是100）
+    - `base_fail_score: float = 0.0` — 不满足的基础分
+    - `enabled: bool = True` — 是否启用兑现安全连续化
+
+  - `TieBreakConfig` — 区分度次级排序配置：
+    - `enabled: bool = True` — 是否启用次级排序
+    - `factors: list[str]` — 排序因子列表，默认 `["conservative_ratio", "loose_ratio", "dividend_yield"]`
+    - `factor_weights: list[float]` — 因子权重，默认 `[0.4, 0.3, 0.3]`
+
+  扩展 `ScoringConfig`，新增字段：
+  - `asset_continuous: AssetCushionContinuousConfig`
+  - `operation_continuous: OperationSafetyContinuousConfig`
+  - `redemption_continuous: RedemptionSafetyContinuousConfig`
+  - `tie_break: TieBreakConfig`
+
+  扩展 `Settings._build_settings` 方法，从YAML中解析上述新增配置。
+
+- **验收标准**：
+  - 所有新增dataclass可正常实例化，字段默认值正确
+  - `ScoringConfig` 包含 `asset_continuous`、`operation_continuous`、`redemption_continuous`、`tie_break` 字段
+  - `Settings._build_settings` 可正确解析YAML中的连续化配置区块
+  - 配置缺失时使用默认值，不报错
+  - 向后兼容：现有代码中构造 `ScoringConfig` 无需修改
+
+---
+
+### REFINE-T02: 连续化映射函数工具模块
+
+- **任务名称**：连续化映射函数工具模块
+- **所属模块**：`common/continuous_mapping.py`（新建）
+- **关联需求**：REQ-011改进
+- **前置任务**：T03
+- **优先级**：P0
+- **预估工时**：1.5h
+
+- **任务描述**：
+  在 `common/continuous_mapping.py` 中实现连续化映射函数工具集，供各analyzer和scorer调用。
+
+  具体实现：
+
+  - `linear_map(value, lower, upper, max_bonus, max_penalty, coefficient=1.0) -> float`
+    - 线性映射：将 `value` 在 `[lower, upper]` 区间线性映射到 `[0, max_bonus]`
+    - `value < lower` 时返回 `-max_penalty * (lower - value) / (upper - lower)`
+    - `value > upper` 时返回 `max_bonus`
+    - 系数 `coefficient` 控制映射灵敏度
+
+  - `sigmoid_map(value, lower, upper, max_bonus, max_penalty, coefficient=1.0) -> float`
+    - Sigmoid映射：在 `[lower, upper]` 区间用sigmoid函数平滑映射
+    - 中点为 `(lower + upper) / 2`
+    - `value <= lower` 时返回接近 `-max_penalty`
+    - `value >= upper` 时返回接近 `max_bonus`
+    - `coefficient` 控制sigmoid斜率（越大越陡）
+
+  - `tanh_map(value, lower, upper, max_bonus, max_penalty, coefficient=1.0) -> float`
+    - Tanh映射：使用双曲正切函数映射
+    - 特性与sigmoid类似，但关于原点对称
+
+  - `apply_mapping(value: float, config: ContinuousMappingConfig) -> float`
+    - 统一入口函数，根据 `config.func_type` 选择对应映射函数
+    - 内部调用上述三种映射之一
+    - 对输入做裁剪保护，防止极端值
+
+  - `normalize_to_range(value, old_lower, old_upper, new_lower, new_upper) -> float`
+    - 通用归一化：将值从旧区间线性映射到新区间
+
+  所有函数需包含完整的docstring和类型注解，边界条件处理完善（除零保护、NaN/Inf保护）。
+
+- **验收标准**：
+  - `linear_map` 在边界值上返回预期结果
+  - `sigmoid_map` 在中点返回约0，两端趋近max_bonus/-max_penalty
+  - `tanh_map` 在中点返回0，两端趋近max_bonus/-max_penalty
+  - `apply_mapping` 根据 func_type 正确分发
+  - 所有函数处理 NaN/Inf/除零不崩溃，返回安全默认值
+  - 类型注解正确，可被mypy检查
+
+---
+
+### REFINE-T03: 资产垫评分连续化改造
+
+- **任务名称**：资产垫评分连续化改造
+- **所属模块**：`analyzer/asset_cushion.py`, `analyzer/scorer.py`
+- **关联需求**：REQ-011改进
+- **前置任务**：REFINE-T01, REFINE-T02, T17
+- **优先级**：P0
+- **预估工时**：2h
+
+- **任务描述**：
+  改造资产垫评分计算逻辑，在T0/T1/T2/FAIL基础分之上增加连续加分项。
+
+  具体改造：
+
+  1. **在 `AssetCushionAnalyzer` 中新增连续化计算方法**：
+     - `calc_continuous_bonus(self, result: AssetCushionResult) -> float`
+     - 当 `tier == FAIL` 时，bonus = 0（不入选不加连续分）
+     - 当 `tier != FAIL` 时：
+       - 计算 `conservative_bonus = apply_mapping(result.conservative_ratio, conservative_ratio_mapping_config)`
+       - 计算 `loose_bonus = apply_mapping(result.loose_ratio, loose_ratio_mapping_config)`
+       - `bonus = (conservative_bonus + loose_bonus) / 2`
+     - 返回 bonus 值
+
+  2. **在 `Scorer._calc_asset_score` 中集成连续化**：
+     - 原逻辑：`base_score = {T0: 100, T1: 70, T2: 40, FAIL: 0}[tier]`
+     - 新逻辑：
+       - `base_score` 不变
+       - 若 `config.asset_continuous.enabled`：
+         - `bonus = asset_cushion_analyzer.calc_continuous_bonus(asset_result)`
+         - `final_score = base_score + bonus`
+       - 否则：`final_score = base_score`（向后兼容）
+     - `final_score` 裁剪到 `[0, 100]` 区间，不超过100分
+
+  3. **Scorer.score 方法签名变更**：
+     - 新增参数 `asset_analyzer: AssetCushionAnalyzer = None`（可选，用于连续化计算）
+     - 当传入 `asset_analyzer` 且连续化启用时，使用连续化评分
+
+- **验收标准**：
+  - 连续化启用时，同一档内不同比率的股票得分不同（如T1档内conservative_ratio=0.84和1.50得分不同）
+  - 连续化禁用时（`enabled=False`），行为与改造前完全一致
+  - 资产垫最终得分不超过100，不低于0
+  - FAIL档的连续加分项为0
+  - 向后兼容：不传 `asset_analyzer` 时走原逻辑
+
+---
+
+### REFINE-T04: 经营安全评分连续化改造
+
+- **任务名称**：经营安全评分连续化改造
+- **所属模块**：`analyzer/operation_safety.py`, `analyzer/scorer.py`
+- **关联需求**：REQ-011改进
+- **前置任务**：REFINE-T01, REFINE-T02, T18
+- **优先级**：P0
+- **预估工时**：1.5h
+
+- **任务描述**：
+  改造经营安全评分计算逻辑，在PASS/PARTIAL/FAIL基础分之上增加连续加减分项。
+
+  具体改造：
+
+  1. **在 `OperationSafetyAnalyzer` 中新增连续化计算方法**：
+     - `calc_continuous_adjustment(self, result: OperationSafetyResult) -> float`
+     - 当 `status == FAIL` 时，adjustment = 0（基础分已为0）
+     - 当 `status == PASS` 时：
+       - `capex_bonus = apply_mapping(result.capex_ratio, capex_ratio_mapping_config)`
+       - 注意：capex_ratio越低越好，映射时需反转（`mapped_value = apply_mapping(max_capex_ratio - capex_ratio, ...)`）
+       - `adjustment = capex_bonus`（加分，capex_ratio越低加分越多）
+     - 当 `status == PARTIAL` 时：
+       - `capex_penalty = apply_mapping(result.capex_ratio, capex_ratio_mapping_config)`
+       - `adjustment = -capex_penalty`（扣分，capex_ratio越高扣分越多）
+     - 返回 adjustment 值
+
+  2. **在 `Scorer._calc_operation_score` 中集成连续化**：
+     - 原逻辑：`base_score = {PASS: 100, PARTIAL: 50, FAIL: 0}[status]`
+     - 新逻辑：
+       - `base_score` 不变
+       - 若 `config.operation_continuous.enabled`：
+         - `adjustment = operation_analyzer.calc_continuous_adjustment(operation_result)`
+         - `final_score = base_score + adjustment`
+       - 否则：`final_score = base_score`
+     - `final_score` 裁剪到 `[0, 100]`
+
+  3. **Scorer.score 方法签名扩展**：
+     - 新增参数 `operation_analyzer: OperationSafetyAnalyzer = None`
+
+- **验收标准**：
+  - 连续化启用时，PASS档内capex_ratio=0.01和0.49的股票得分不同
+  - 连续化禁用时，行为与改造前完全一致
+  - 经营安全最终得分不超过100，不低于0
+  - FAIL档的连续加减分项为0
+  - capex_ratio越低加分越多，越高扣分越多
+
+---
+
+### REFINE-T05: 兑现安全评分连续化改造
+
+- **任务名称**：兑现安全评分连续化改造
+- **所属模块**：`analyzer/redemption_safety.py`, `analyzer/scorer.py`
+- **关联需求**：REQ-011改进
+- **前置任务**：REFINE-T01, REFINE-T02, T19
+- **优先级**：P0
+- **预估工时**：2h
+
+- **任务描述**：
+  将兑现安全评分从二元(0/100)改为多元连续评分，根据分红收益率、分红连续年数、盈利恢复强度等指标连续打分。
+
+  具体改造：
+
+  1. **在 `RedemptionSafetyAnalyzer` 中新增连续化计算方法**：
+     - `calc_continuous_score(self, stock: StockFullData, result: RedemptionSafetyResult) -> float`
+     - 若 `result.has_redemption_logic == False`：返回 `config.base_fail_score`（默认0）
+     - 若 `result.has_redemption_logic == True`：
+       - **分红路径贡献**（当 `dividend_path == True`）：
+         - `div_yield_score = apply_mapping(stock.dividend.dividend_yield, dividend_yield_mapping_config)`
+         - `div_years_score = apply_mapping(stock.dividend.dividend_years, dividend_years_mapping_config)`
+         - `dividend_contribution = config.base_pass_score + div_yield_score * config.dividend_yield_weight + div_years_score * config.dividend_years_weight`
+       - **盈利恢复贡献**（当 `earnings_path == True`）：
+         - 计算盈利恢复强度：`intensity = (latest_profit - prev_profit) / abs(prev_profit)`，裁剪到[0, 1]
+         - `earnings_score = apply_mapping(intensity, earnings_recovery_mapping_config)`
+         - `earnings_contribution = config.base_pass_score + earnings_score * config.earnings_recovery_weight`
+       - **事件路径贡献**（当 `event_path == True`）：
+         - `event_contribution = config.base_pass_score + 10`（固定小加分）
+       - **多路径加权**：
+         - 若同时满足多条路径，取各路径贡献的加权平均
+         - `final = base_pass_score + max(dividend_bonus, earnings_bonus, event_bonus)`（取最强路径加分）
+     - 返回 final，裁剪到 `[0, 100]`
+
+  2. **在 `Scorer._calc_redemption_score` 中集成连续化**：
+     - 原逻辑：`has_logic ? 100 : 0`
+     - 新逻辑：
+       - 若 `config.redemption_continuous.enabled`：
+         - `score = redemption_analyzer.calc_continuous_score(stock, redemption_result)`
+       - 否则：`score = 100 if has_logic else 0`
+     - 返回 score
+
+  3. **Scorer.score 方法签名扩展**：
+     - 新增参数 `redemption_analyzer: RedemptionSafetyAnalyzer = None`
+     - 新增参数 `stock: StockFullData`（兑现安全连续化需要原始股票数据）
+
+- **验收标准**：
+  - 连续化启用时，兑现安全评分不再是0/100二值，而是连续值（如60~100之间）
+  - 连续化禁用时，行为与改造前完全一致（0/100）
+  - 股息率越高，兑现安全得分越高
+  - 分红连续年数越多，兑现安全得分越高
+  - 盈利恢复强度越大，兑现安全得分越高
+  - 多条兑现路径同时满足时，得分高于单一路径
+  - 不满足任何兑现路径时得分为 base_fail_score（默认0）
+  - 最终得分不超过100，不低于0
+
+---
+
+### REFINE-T06: 综合评分器Scorer连续化改造
+
+- **任务名称**：综合评分器Scorer连续化改造
+- **所属模块**：`analyzer/scorer.py`
+- **关联需求**：REQ-011改进
+- **前置任务**：REFINE-T03, REFINE-T04, REFINE-T05, T20
+- **优先级**：P0
+- **预估工时**：2h
+
+- **任务描述**：
+  改造 `Scorer.score` 方法，集成资产垫、经营安全、兑现安全三要义的连续化评分，并确保综合评分的计算逻辑完整。
+
+  具体改造：
+
+  1. **重构 `Scorer.score` 方法签名**：
+     ```python
+     def score(
+         self,
+         stock: StockFullData,
+         asset_result: AssetCushionResult,
+         operation_result: OperationSafetyResult,
+         redemption_result: RedemptionSafetyResult,
+         asset_analyzer: AssetCushionAnalyzer = None,
+         operation_analyzer: OperationSafetyAnalyzer = None,
+         redemption_analyzer: RedemptionSafetyAnalyzer = None,
+         deducted_net_profit_is_estimated: bool = False,
+     ) -> ScoredResult:
+     ```
+
+  2. **连续化评分调用链**：
+     - `asset_score = self._calc_asset_score(asset_result, asset_analyzer)`
+     - `operation_score = self._calc_operation_score(operation_result, operation_analyzer)`
+     - `redemption_score = self._calc_redemption_score(stock, redemption_result, redemption_analyzer)`
+     - `total = asset_score * weight_asset + operation_score * weight_op + redemption_score * weight_red`
+
+  3. **连续化加分项明细记录**：
+     - 在 ScoredResult 中新增字段记录连续化加分/扣分明细（见REFINE-T07）
+     - 便于调试和结果输出中展示评分构成
+
+  4. **向后兼容保障**：
+     - 当所有 `*_analyzer` 参数为 None 时，等价于关闭连续化，走原逻辑
+     - 当 `*_continuous.enabled = False` 时，即使传入了analyzer也走原逻辑
+
+  5. **更新 `rank_results` 方法**：
+     - 新增区分度次级排序逻辑（见REFINE-T09），当总分相同时按次级因子排序
+
+- **验收标准**：
+  - 连续化全部启用时，评分结果具有更高的区分度（同档内不同股票得分不同）
+  - 连续化全部禁用时，评分结果与改造前完全一致
+  - 综合评分 = 资产垫得分×40% + 经营安全得分×30% + 兑现安全得分×30%
+  - 传入analyzer但连续化未启用时，走原逻辑
+  - 不传analyzer时，走原逻辑
+
+---
+
+### REFINE-T07: ScoredResult模型扩展（连续化字段）
+
+- **任务名称**：ScoredResult模型扩展（连续化字段）
+- **所属模块**：`common/models.py`
+- **关联需求**：REQ-011改进, REQ-014
+- **前置任务**：REFINE-T06, T05
+- **优先级**：P1
+- **预估工时**：1h
+
+- **任务描述**：
+  在 `ScoredResult` 中新增连续化评分相关字段，用于记录评分构成明细。
+
+  具体新增字段：
+
+  - `asset_continuous_bonus: float = 0.0` — 资产垫连续加分项
+  - `operation_continuous_adjustment: float = 0.0` — 经营安全连续加减分项
+  - `redemption_continuous_bonus: float = 0.0` — 兑现安全连续加分项
+  - `redemption_base_score: float = 0.0` — 兑现安全基础分（连续化后基础分可能不是0/100）
+  - `tie_break_score: float = 0.0` — 次级排序区分度得分
+  - `scoring_mode: str = "discrete"` — 评分模式标识，"discrete"=离散分档, "continuous"=连续化
+
+  所有新字段均带默认值，确保现有代码构造 ScoredResult 无需修改（向后兼容）。
+
+- **验收标准**：
+  - ScoredResult 新增6个字段，默认值正确
+  - 现有代码中构造 ScoredResult 不报错，向后兼容
+  - `scoring_mode` 在连续化启用时为 "continuous"，禁用时为 "discrete"
+  - 连续化加分项在离散模式下均为0.0
+
+---
+
+### REFINE-T08: 配置文件连续化参数扩展
+
+- **任务名称**：配置文件连续化参数扩展
+- **所属模块**：`config/default_config.yaml`, `config.yaml`
+- **关联需求**：NFR-004
+- **前置任务**：REFINE-T01, T08
+- **优先级**：P1
+- **预估工时**：1h
+
+- **任务描述**：
+  在配置文件中新增连续化评分参数区块，使所有连续化参数可在YAML中配置。
+
+  具体在 `scoring` 区块下新增：
+
+  ```yaml
+  scoring:
+    # ... 现有配置保留 ...
+
+    # 评分连续化配置
+    continuous:
+      # 资产垫连续化
+      asset_cushion:
+        enabled: true
+        conservative_ratio_mapping:
+          func_type: "linear"
+          coefficient: 1.0
+          lower_bound: 0.8
+          upper_bound: 2.0
+          max_bonus: 10.0
+          max_penalty: 0.0
+        loose_ratio_mapping:
+          func_type: "linear"
+          coefficient: 1.0
+          lower_bound: 1.0
+          upper_bound: 3.0
+          max_bonus: 10.0
+          max_penalty: 0.0
+
+      # 经营安全连续化
+      operation_safety:
+        enabled: true
+        capex_ratio_mapping:
+          func_type: "linear"
+          coefficient: 1.0
+          lower_bound: 0.0
+          upper_bound: 0.5
+          max_bonus: 15.0
+          max_penalty: 15.0
+
+      # 兑现安全连续化
+      redemption_safety:
+        enabled: true
+        dividend_yield_weight: 0.4
+        dividend_years_weight: 0.3
+        earnings_recovery_weight: 0.3
+        dividend_yield_mapping:
+          func_type: "sigmoid"
+          coefficient: 2.0
+          lower_bound: 0.02
+          upper_bound: 0.08
+          max_bonus: 20.0
+          max_penalty: 0.0
+        dividend_years_mapping:
+          func_type: "linear"
+          coefficient: 1.0
+          lower_bound: 3
+          upper_bound: 10
+          max_bonus: 15.0
+          max_penalty: 0.0
+        earnings_recovery_mapping:
+          func_type: "linear"
+          coefficient: 1.0
+          lower_bound: 0.0
+          upper_bound: 1.0
+          max_bonus: 15.0
+          max_penalty: 0.0
+        base_pass_score: 60.0
+        base_fail_score: 0.0
+
+    # 区分度次级排序
+    tie_break:
+      enabled: true
+      factors: ["conservative_ratio", "loose_ratio", "dividend_yield"]
+      factor_weights: [0.4, 0.3, 0.3]
+  ```
+
+  同步更新 `config/default_config.yaml` 和 `config.yaml`，含完整中文注释。
+
+- **验收标准**：
+  - `config.yaml` 和 `config/default_config.yaml` 中新增 `scoring.continuous` 和 `scoring.tie_break` 区块
+  - YAML语法正确，可被 `yaml.safe_load()` 正常解析
+  - 所有参数与 REFINE-T01 中数据类定义一致
+  - 配置缺失时使用默认值，不报错
+  - 含完整中文注释
+
+---
+
+### REFINE-T09: 区分度次级排序因子实现
+
+- **任务名称**：区分度次级排序因子实现
+- **所属模块**：`analyzer/scorer.py`
+- **关联需求**：REQ-012改进
+- **前置任务**：REFINE-T06, T17, T18
+- **优先级**：P1
+- **预估工时**：1.5h
+
+- **任务描述**：
+  在 `Scorer` 中实现区分度次级排序逻辑，当综合总分相同时，按连续指标进行细粒度排序。
+
+  具体实现：
+
+  1. **计算次级排序得分**：
+     - `_calc_tie_break_score(self, stock: StockFullData, asset_result: AssetCushionResult, operation_result: OperationSafetyResult) -> float`
+     - 根据 `config.tie_break.factors` 配置的因子列表和权重：
+       - `conservative_ratio`：资产垫保守比率（归一化到0~1）
+       - `loose_ratio`：资产垫宽松比率（归一化到0~1）
+       - `dividend_yield`：股息率（归一化到0~1）
+       - `fcf_yield`：FCF/市值（自由现金流收益率，需新增计算）
+       - `capex_ratio_inv`：1 - capex_ratio（资本开支率的反向指标）
+     - 各因子归一化后按权重加权求和
+     - 归一化方法：使用 `normalize_to_range` 将因子值映射到 [0, 1]
+
+  2. **更新 `rank_results` 方法**：
+     - 原逻辑：仅按 `total_score` 降序排序
+     - 新逻辑：
+       - 若 `config.tie_break.enabled`：
+         - 排序key改为 `(total_score, tie_break_score)` 双键降序
+         - 总分相同者按次级得分排序
+       - 否则：仅按 `total_score` 降序
+
+  3. **在 `score` 方法中集成**：
+     - 计算并设置 `result.tie_break_score`
+
+- **验收标准**：
+  - 总分相同的股票，按次级因子排序后顺序合理（比率更高、股息率更高的排前面）
+  - 次级排序禁用时，排序行为与改造前一致
+  - `tie_break_score` 在0~1之间
+  - 因子缺失时（如dividend_yield无数据），该因子贡献为0
+
+---
+
+### REFINE-T10: 输出层适配连续化评分字段
+
+- **任务名称**：输出层适配连续化评分字段
+- **所属模块**：`output/csv_writer.py`, `output/table_printer.py`, `output/formatter.py`
+- **关联需求**：REQ-014改进
+- **前置任务**：REFINE-T07, T22, T23
+- **优先级**：P1
+- **预估工时**：1h
+
+- **任务描述**：
+  改造输出层，使CSV和终端表格输出包含连续化评分明细字段。
+
+  具体改造：
+
+  1. **CSV输出扩展**（`csv_writer.py`）：
+     - 在现有列之后追加：
+       - `评分模式`（scoring_mode：离散/连续）
+       - `资产垫连续加分`（asset_continuous_bonus）
+       - `经营安全连续调整`（operation_continuous_adjustment）
+       - `兑现安全连续加分`（redemption_continuous_bonus）
+       - `次级排序得分`（tie_break_score）
+     - 离散模式下这些列值为0或空
+
+  2. **终端表格输出扩展**（`table_printer.py`）：
+     - 表格新增"连续加分"列（合并显示三项加分）
+     - 表格新增"评分模式"列
+
+  3. **格式化工具更新**（`formatter.py`）：
+     - 新增 `format_continuous_bonus` 格式化方法
+     - 保留2位小数
+
+- **验收标准**：
+  - CSV输出包含新增的5列，列名正确
+  - 终端表格包含新增列，显示正常
+  - 离散模式下新增列值为0
+  - 连续模式下新增列值与ScoredResult中字段值一致
+
+---
+
+### REFINE-T11: 评分连续化单元测试
+
+- **任务名称**：评分连续化单元测试
+- **所属模块**：`tests/`
+- **关联需求**：REQ-011改进
+- **前置任务**：REFINE-T06, REFINE-T09
+- **优先级**：P2
+- **预估工时**：3h
+
+- **任务描述**：
+  为评分连续化改造编写全面的单元测试，覆盖新增逻辑和边界条件。
+
+  具体测试文件：
+
+  1. **`tests/test_continuous_mapping.py`** — 映射函数测试：
+     - `test_linear_map_basic` — 线性映射基本正确性
+     - `test_linear_map_boundary` — 线性映射边界值
+     - `test_sigmoid_map_basic` — Sigmoid映射基本正确性
+     - `test_sigmoid_map_boundary` — Sigmoid映射边界值
+     - `test_tanh_map_basic` — Tanh映射基本正确性
+     - `test_apply_mapping_dispatch` — apply_mapping函数分发正确性
+     - `test_nan_inf_protection` — NaN/Inf输入保护
+     - `test_zero_division_protection` — 除零保护
+
+  2. **`tests/test_scorer_continuous.py`** — 连续化评分器测试：
+     - `test_asset_score_continuous_same_tier_different_ratio` — 同档不同比率得分不同
+     - `test_asset_score_continuous_t0_higher_than_t1` — T0连续分仍高于T1
+     - `test_operation_score_continuous_low_capex_bonus` — 低capex_ratio加分
+     - `test_operation_score_continuous_high_capex_penalty` — 高capex_ratio扣分
+     - `test_redemption_score_continuous_not_binary` — 兑现安全不再是0/100
+     - `test_redemption_score_continuous_higher_yield_higher_score` — 股息率越高得分越高
+     - `test_total_score_continuous_more_distinct` — 连续化综合评分区分度更高
+     - `test_backward_compatible_when_disabled` — 禁用时与原逻辑一致
+
+  3. **`tests/test_tie_break.py`** — 次级排序测试：
+     - `test_tie_break_same_total_different_order` — 总分相同时按次级因子排序
+     - `test_tie_break_disabled` — 禁用时排序行为不变
+     - `test_tie_break_missing_factor` — 因子缺失时不崩溃
+
+- **验收标准**：
+  - 所有新增测试通过
+  - 映射函数测试覆盖 linear/sigmoid/tanh 三种函数
+  - 连续化评分测试验证区分度提升
+  - 向后兼容测试验证禁用连续化时行为不变
+  - 边界条件测试覆盖 NaN/Inf/除零
+
+---
+
+### REFINE-T12: 区分度验证与回归测试
+
+- **任务名称**：区分度验证与回归测试
+- **所属模块**：`tests/`
+- **关联需求**：REQ-011改进, REQ-012改进
+- **前置任务**：REFINE-T11, T26
+- **优先级**：P2
+- **预估工时**：2h
+
+- **任务描述**：
+  验证评分连续化改造后区分度显著提升，并确保原有功能不退化。
+
+  具体验证：
+
+  1. **区分度量化验证**：
+     - 使用沪深300实际数据（或模拟数据）运行完整选股流程
+     - 统计连续化前后的评分分布：
+       - 评分唯一值数量（连续化后应显著增加）
+       - 评分标准差（连续化后应增大）
+       - 评分信息熵（连续化后应增大）
+       - 最大同分堆的大小（连续化后应减小）
+     - 断言：连续化后评分唯一值数量 >= 离散模式的2倍
+
+  2. **评分分布合理性验证**：
+     - 连续化评分仍呈右偏分布（高分少、低分多）
+     - T0档股票连续化后评分仍高于T1档
+     - 三要义全PASS的股票总分仍为最高区间
+
+  3. **回归测试**：
+     - 连续化禁用时，选股结果与改造前完全一致（评分值、排序、输出）
+     - 改造前所有单元测试仍通过
+     - 现有A股选股端到端流程不受影响
+
+  4. **港股兼容性验证**：
+     - 港股选股流程使用连续化评分器正常工作
+     - 港股专用配置可独立覆盖连续化参数
+
+- **验收标准**：
+  - 连续化后评分唯一值数量显著增加（≥离散模式2倍）
+  - 最大同分堆大小显著减小
+  - 评分标准差增大
+  - 评分分层合理（T0 > T1 > T2 > FAIL）
+  - 连续化禁用时回归结果完全一致
+  - 现有A股全部测试通过
+  - 港股选股流程兼容连续化评分
+
+---
+
+## 评分连续化任务依赖关系图
+
+```
+REFINE-T01 (配置数据类) ──┬── REFINE-T03 (资产垫连续化) ──┐
+                           ├── REFINE-T04 (经营安全连续化) ──┤
+                           └── REFINE-T05 (兑现安全连续化) ──┤
+REFINE-T02 (映射函数)  ──┬── REFINE-T03                    ├── REFINE-T06 (Scorer改造)
+                           ├── REFINE-T04                    │
+                           └── REFINE-T05                    │
+REFINE-T06 ──┬── REFINE-T07 (模型扩展) ──→ REFINE-T10 (输出层)
+              └── REFINE-T09 (次级排序)  ──→ REFINE-T10
+REFINE-T06, REFINE-T09 ──→ REFINE-T11 (单元测试) ──→ REFINE-T12 (区分度验证)
+REFINE-T01, T08 ──→ REFINE-T08 (配置文件扩展)
+```
+
+---
+
+## 评分连续化需求覆盖追溯矩阵
+
+| 需求编号 | 需求描述 | 覆盖任务 |
+|----------|----------|----------|
+| REQ-011改进-1 | 资产垫评分连续化 | REFINE-T01, REFINE-T02, REFINE-T03, REFINE-T06 |
+| REQ-011改进-2 | 经营安全评分连续化 | REFINE-T01, REFINE-T02, REFINE-T04, REFINE-T06 |
+| REQ-011改进-3 | 兑现安全评分连续化 | REFINE-T01, REFINE-T02, REFINE-T05, REFINE-T06 |
+| REQ-011改进-4 | 区分度次级排序因子 | REFINE-T01, REFINE-T09 |
+| REQ-011改进-5 | 连续化参数配置化 | REFINE-T01, REFINE-T08 |
+| REQ-012改进 | 综合排序区分度提升 | REFINE-T06, REFINE-T09, REFINE-T12 |
+| REQ-014改进 | 输出包含连续化明细 | REFINE-T07, REFINE-T10 |
+| NFR-004改进 | 连续化参数可配置 | REFINE-T01, REFINE-T08 |

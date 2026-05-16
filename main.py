@@ -172,7 +172,12 @@ def _evaluate_and_score(full_data_list, delisting_filter, asset_analyzer, operat
             operation_result = operation_analyzer.evaluate(stock)
             redemption_result = redemption_analyzer.evaluate(stock)
             estimated = getattr(stock, '_dkpe_estimated', False)
-            scored = scorer.score(stock, asset_result, operation_result, redemption_result, deducted_net_profit_is_estimated=estimated)
+            scored = scorer.score(
+                stock, asset_result, operation_result, redemption_result,
+                asset_analyzer=asset_analyzer, operation_analyzer=operation_analyzer,
+                redemption_analyzer=redemption_analyzer,
+                deducted_net_profit_is_estimated=estimated,
+            )
             scored_results.append(scored)
         except DataValidationError as e:
             logger.warning(f"股票{stock.info.code}评分跳过: {e}")

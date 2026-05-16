@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def format_scored_result(r: ScoredResult) -> dict:
-    return {
+    result = {
         "排名": r.rank,
         "股票代码": r.stock_code,
         "股票名称": r.stock_name,
@@ -18,11 +18,18 @@ def format_scored_result(r: ScoredResult) -> dict:
         "自由现金流(元)": f"{r.free_cash_flow:,.0f}",
         "资本开支率": f"{r.capex_ratio:.4f}" if r.capex_ratio != float("inf") else "N/A",
         "兑现路径": r.redemption_path_type,
-        "资产垫得分": f"{r.asset_cushion_score:.0f}",
-        "经营安全得分": f"{r.operation_safety_score:.0f}",
-        "兑现安全得分": f"{r.redemption_safety_score:.0f}",
+        "资产垫得分": f"{r.asset_cushion_score:.2f}",
+        "经营安全得分": f"{r.operation_safety_score:.2f}",
+        "兑现安全得分": f"{r.redemption_safety_score:.2f}",
         "综合评分": f"{r.total_score:.2f}",
     }
+    if r.scoring_mode == "continuous":
+        result["资产垫连续加分"] = f"{r.asset_continuous_bonus:.2f}"
+        result["经营安全连续调整"] = f"{r.operation_continuous_adjustment:.2f}"
+        result["兑现安全连续加分"] = f"{r.redemption_continuous_bonus:.2f}"
+        result["次级排序得分"] = f"{r.tie_break_score:.4f}"
+        result["评分模式"] = r.scoring_mode
+    return result
 
 
 class CsvWriter:

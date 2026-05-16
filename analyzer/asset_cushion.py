@@ -68,3 +68,10 @@ class AssetCushionAnalyzer:
             return AssetCushionTier.T2
 
         return AssetCushionTier.FAIL
+
+    def calc_continuous_bonus(self, result: AssetCushionResult, config) -> float:
+        from common.continuous_mapping import apply_mapping
+
+        conservative_bonus = apply_mapping(result.conservative_ratio, config.conservative_ratio_mapping)
+        loose_bonus = apply_mapping(result.loose_ratio, config.loose_ratio_mapping)
+        return (conservative_bonus + loose_bonus) / 2.0

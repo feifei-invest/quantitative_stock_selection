@@ -61,6 +61,66 @@ scoring:
     redemption_pass: 100
     redemption_fail: 0
 
+  continuous:
+    asset_cushion:
+      enabled: true
+      conservative_ratio_mapping:
+        func_type: "linear"
+        coefficient: 1.0
+        lower_bound: 0.8
+        upper_bound: 2.0
+        max_bonus: 10.0
+        max_penalty: 0.0
+      loose_ratio_mapping:
+        func_type: "linear"
+        coefficient: 1.0
+        lower_bound: 1.0
+        upper_bound: 3.0
+        max_bonus: 10.0
+        max_penalty: 0.0
+    operation_safety:
+      enabled: true
+      capex_ratio_mapping:
+        func_type: "linear"
+        coefficient: 1.0
+        lower_bound: 0.0
+        upper_bound: 0.5
+        max_bonus: 15.0
+        max_penalty: 15.0
+    redemption_safety:
+      enabled: true
+      dividend_yield_weight: 0.4
+      dividend_years_weight: 0.3
+      earnings_recovery_weight: 0.3
+      dividend_yield_mapping:
+        func_type: "sigmoid"
+        coefficient: 2.0
+        lower_bound: 0.02
+        upper_bound: 0.08
+        max_bonus: 20.0
+        max_penalty: 0.0
+      dividend_years_mapping:
+        func_type: "linear"
+        coefficient: 1.0
+        lower_bound: 3
+        upper_bound: 10
+        max_bonus: 15.0
+        max_penalty: 0.0
+      earnings_recovery_mapping:
+        func_type: "linear"
+        coefficient: 1.0
+        lower_bound: 0.0
+        upper_bound: 1.0
+        max_bonus: 15.0
+        max_penalty: 0.0
+      base_pass_score: 60.0
+      base_fail_score: 0.0
+
+  tie_break:
+    enabled: true
+    factors: ["conservative_ratio", "loose_ratio", "dividend_yield"]
+    factor_weights: [0.4, 0.3, 0.3]
+
 # 输出配置
 output:
   csv_dir: "output_data/results"

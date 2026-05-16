@@ -130,3 +130,9 @@ class ScoredResult:
     market: str = "A"
     currency: str = "CNY"
     deducted_net_profit_is_estimated: bool = False
+    asset_continuous_bonus: float = 0.0
+    operation_continuous_adjustment: float = 0.0
+    redemption_continuous_bonus: float = 0.0
+    redemption_base_score: float = 0.0
+    tie_break_score: float = 0.0
+    scoring_mode: str = "discrete"

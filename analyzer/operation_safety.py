@@ -37,3 +37,20 @@ class OperationSafetyAnalyzer:
             is_capex_ratio_low=is_capex_low,
             status=status,
         )
+
+    def calc_continuous_adjustment(self, result: OperationSafetyResult, config) -> float:
+        from common.continuous_mapping import apply_mapping
+
+        if result.status == OperationStatus.FAIL:
+            return 0.0
+
+        max_capex = self.config.max_capex_ratio
+        if result.status == OperationStatus.PASS:
+            reversed_val = max_capex - result.capex_ratio
+            return apply_mapping(reversed_val, config.capex_ratio_mapping)
+
+        if result.status == OperationStatus.PARTIAL:
+            penalty = apply_mapping(result.capex_ratio, config.capex_ratio_mapping)
+            return -penalty
+
+        return 0.0

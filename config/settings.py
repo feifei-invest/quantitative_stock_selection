@@ -100,6 +100,44 @@ class OutputConfig:
 
 
 @dataclass
+class HKDataSourceConfig:
+    primary: str = "akshare"
+    fallback: str = "eastmoney"
+
+
+@dataclass
+class HKConstituentsConfig:
+    include_sse: bool = True
+    include_szse: bool = True
+    max_stocks: int = 300
+
+
+@dataclass
+class HKCurrencyConfig:
+    unit: str = "HKD"
+    convert_to_cny: bool = False
+    fixed_hkd_cny_rate: float = 0.0
+
+
+@dataclass
+class HKDelistingConfig:
+    max_suspend_months: int = 3
+    min_market_cap_hkd: float = 50000000.0
+    filter_audit_opinion: bool = True
+
+
+@dataclass
+class HKStockConfig:
+    data_source: HKDataSourceConfig = field(default_factory=HKDataSourceConfig)
+    constituents: HKConstituentsConfig = field(default_factory=HKConstituentsConfig)
+    currency: HKCurrencyConfig = field(default_factory=HKCurrencyConfig)
+    delisting: HKDelistingConfig = field(default_factory=HKDelistingConfig)
+    asset_cushion: Optional[AssetCushionConfig] = None
+    scoring: Optional[ScoringConfig] = None
+    field_mapping_path: str = "config/hk_field_mapping.yaml"
+
+
+@dataclass
 class Settings:
     data_source: DataSourceConfig = field(default_factory=DataSourceConfig)
     delisting: DelistingConfig = field(default_factory=DelistingConfig)
@@ -108,6 +146,8 @@ class Settings:
     redemption_safety: RedemptionSafetyConfig = field(default_factory=RedemptionSafetyConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
+    market: str = "ALL"
+    hk_stock: HKStockConfig = field(default_factory=HKStockConfig)
 
     _instance: Optional["Settings"] = field(default=None, repr=False)
 
@@ -219,8 +259,80 @@ class Settings:
                 log_level=out_raw.get("log_level", "INFO"),
                 terminal_max_rows=out_raw.get("terminal_max_rows", 50),
             ),
+            market=raw.get("market", "ALL"),
+            hk_stock=cls._build_hk_stock(raw.get("hk_stock", {})),
         )
         return settings
+
+    @classmethod
+    def _build_hk_stock(cls, hk_raw: dict) -> HKStockConfig:
+        ds = hk_raw.get("data_source", {})
+        cons = hk_raw.get("constituents", {})
+        cur = hk_raw.get("currency", {})
+        dl = hk_raw.get("delisting", {})
+
+        ac_raw = hk_raw.get("asset_cushion")
+        hk_ac = None
+        if ac_raw:
+            hk_ac = AssetCushionConfig(
+                t0=T0Config(
+                    min_conservative_ratio=ac_raw.get("t0", {}).get("min_conservative_ratio", 0.8),
+                    min_loose_ratio=ac_raw.get("t0", {}).get("min_loose_ratio", 1.5),
+                ),
+                t1=T1Config(
+                    min_loose_ratio=ac_raw.get("t1", {}).get("min_loose_ratio", 1.0),
+                    require_positive_conservative=ac_raw.get("t1", {}).get("require_positive_conservative", True),
+                ),
+                t2=T2Config(
+                    require_positive_loose=ac_raw.get("t2", {}).get("require_positive_loose", True),
+                    min_current_asset_net_ratio=ac_raw.get("t2", {}).get("min_current_asset_net_ratio", 0.5),
+                ),
+            )
+
+        sc_raw = hk_raw.get("scoring")
+        hk_sc = None
+        if sc_raw:
+            weights = sc_raw.get("weights", {})
+            scores = sc_raw.get("scores", {})
+            hk_sc = ScoringConfig(
+                asset_cushion_weight=weights.get("asset_cushion", 0.4),
+                operation_safety_weight=weights.get("operation_safety", 0.3),
+                redemption_safety_weight=weights.get("redemption_safety", 0.3),
+                t0_score=scores.get("t0", 100),
+                t1_score=scores.get("t1", 70),
+                t2_score=scores.get("t2", 40),
+                fail_score=scores.get("fail", 0),
+                operation_pass_score=scores.get("operation_pass", 100),
+                operation_partial_score=scores.get("operation_partial", 50),
+                operation_fail_score=scores.get("operation_fail", 0),
+                redemption_pass_score=scores.get("redemption_pass", 100),
+                redemption_fail_score=scores.get("redemption_fail", 0),
+            )
+
+        return HKStockConfig(
+            data_source=HKDataSourceConfig(
+                primary=ds.get("primary", "akshare"),
+                fallback=ds.get("fallback", "eastmoney"),
+            ),
+            constituents=HKConstituentsConfig(
+                include_sse=cons.get("include_sse", True),
+                include_szse=cons.get("include_szse", True),
+                max_stocks=cons.get("max_stocks", 300),
+            ),
+            currency=HKCurrencyConfig(
+                unit=cur.get("unit", "HKD"),
+                convert_to_cny=cur.get("convert_to_cny", False),
+                fixed_hkd_cny_rate=cur.get("fixed_hkd_cny_rate", 0.0),
+            ),
+            delisting=HKDelistingConfig(
+                max_suspend_months=dl.get("max_suspend_months", 3),
+                min_market_cap_hkd=dl.get("min_market_cap_hkd", 50000000.0),
+                filter_audit_opinion=dl.get("filter_audit_opinion", True),
+            ),
+            asset_cushion=hk_ac,
+            scoring=hk_sc,
+            field_mapping_path=hk_raw.get("field_mapping_path", "config/hk_field_mapping.yaml"),
+        )
 
     @classmethod
     def _validate(cls, settings: "Settings"):

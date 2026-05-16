@@ -1,0 +1,80 @@
+balance_sheet:
+  cash_and_equivalents:
+    - "Cash and cash equivalents"
+    - "现金及现金等价物"
+    - "Cash and bank balances"
+    - "货币资金"
+    - "Bank balances and cash"
+  total_current_assets:
+    - "Total current assets"
+    - "流动资产合计"
+    - "Current assets"
+    - "流动资产"
+  total_assets:
+    - "Total assets"
+    - "资产总计"
+    - "资产合计"
+  total_current_liabilities:
+    - "Total current liabilities"
+    - "流动负债合计"
+    - "Current liabilities"
+    - "流动负债"
+  total_liabilities:
+    - "Total liabilities"
+    - "负债合计"
+    - "负债总计"
+  net_assets:
+    - "Equity attributable to owners of the parent"
+    - "归属于母公司股东权益合计"
+    - "Total equity"
+    - "所有者权益(或股东权益)合计"
+    - "Shareholders' equity"
+    - "净资产"
+
+interest_bearing_debt_items:
+  - "Short-term bank borrowings"
+  - "短期借款"
+  - "Bank borrowings - current"
+  - "长期借款"
+  - "Long-term bank borrowings"
+  - "Bank borrowings - non-current"
+  - "Bonds payable"
+  - "应付债券"
+  - "Debentures payable"
+  - "Lease liabilities - current"
+  - "融资租赁负债（流动）"
+  - "Lease liabilities - non-current"
+  - "融资租赁负债（非流动）"
+
+income_statement:
+  revenue:
+    - "Revenue"
+    - "营业收入"
+    - "Turnover"
+  operating_cost:
+    - "Cost of sales"
+    - "营业成本"
+    - "Cost of revenue"
+  net_profit:
+    - "Profit for the year"
+    - "净利润"
+    - "Net profit"
+    - "Profit attributable to owners of the parent"
+    - "归属于母公司所有者的净利润"
+  deducted_net_profit:
+    - "Profit for the year excluding non-recurring items"
+    - "扣除非经常性损益后的净利润"
+    - "Net profit excluding non-recurring items"
+    - "扣除非经常损益后的净利润"
+
+cash_flow:
+  operating_cash_flow:
+    - "Net cash flows from operating activities"
+    - "经营活动产生的现金流量净额"
+    - "Cash generated from operations"
+  capital_expenditure:
+    - "Purchase of property, plant and equipment"
+    - "购建固定资产、无形资产和其他长期资产支付的现金"
+    - "Additions of PPE"
+    - "Purchase of PPE"
+    - "Capital expenditure"

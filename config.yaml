@@ -68,3 +68,25 @@ output:
   log_dir: "logs"
   log_level: "INFO"
   terminal_max_rows: 50
+
+# 市场模式: "A"=仅A股, "HK"=仅港股, "ALL"=全市场
+market: "ALL"
+
+# 港股通选股配置
+hk_stock:
+  data_source:
+    primary: "akshare"
+    fallback: "eastmoney"
+  constituents:
+    include_sse: true
+    include_szse: true
+    max_stocks: 300
+  currency:
+    unit: "HKD"
+    convert_to_cny: false
+    fixed_hkd_cny_rate: 0.0
+  delisting:
+    max_suspend_months: 3
+    min_market_cap_hkd: 50000000
+    filter_audit_opinion: true
+  field_mapping_path: "config/hk_field_mapping.yaml"

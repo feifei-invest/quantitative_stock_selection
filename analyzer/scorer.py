@@ -24,6 +24,7 @@ class Scorer:
         asset_result: AssetCushionResult,
         operation_result: OperationSafetyResult,
         redemption_result: RedemptionSafetyResult,
+        deducted_net_profit_is_estimated: bool = False,
     ) -> ScoredResult:
         asset_score = self._calc_asset_score(asset_result.tier)
         operation_score = self._calc_operation_score(operation_result.status)
@@ -48,6 +49,9 @@ class Scorer:
             operation_safety_score=operation_score,
             redemption_safety_score=redemption_score,
             total_score=total,
+            market=stock.info.market,
+            currency="HKD" if stock.info.market == "HK" else "CNY",
+            deducted_net_profit_is_estimated=deducted_net_profit_is_estimated,
         )
 
     @staticmethod

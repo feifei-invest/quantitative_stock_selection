@@ -28,6 +28,7 @@ class StockInfo:
     code: str = ""
     name: str = ""
     exchange: str = ""
+    market: str = "A"
 
 
 @dataclass
@@ -126,3 +127,6 @@ class ScoredResult:
     redemption_safety_score: float = 0.0
     total_score: float = 0.0
     rank: int = 0
+    market: str = "A"
+    currency: str = "CNY"
+    deducted_net_profit_is_estimated: bool = False

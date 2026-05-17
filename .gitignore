@@ -1,5 +1,9 @@
-# 运行结果数据
-output_data/
+# 运行结果数据（保留results，忽略cache）
+output_data/cache/
+
+# 保留结果目录的占位
+!output_data/
+!output_data/results/
 
 # 原始二进制文档（体积大，已有docs/中的md版本）
 origin_docs/
